@@ -1,0 +1,67 @@
+# Публикация на nuget.org через Trusted Publishing (OIDC).
+# На nuget.org (аккаунт LonelySoul): Trusted Publishing → владелец политики — пользователь LonelySoul;
+# Repository owner: KarataevDmitry, Repository: AIGuiders.AgentNotes.Core, Workflow file: nuget-publish.yml
+# (имя файла без пути). Секреты не нужны.
+name: Publish to NuGet
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: 'Версия пакета (SemVer, напр. 1.0.1)'
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Версия пакета
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            v="${GITHUB_REF_NAME#v}"
+            echo "PKG_VERSION=$v" >> "$GITHUB_ENV"
+            echo "Publishing version (from tag): $v"
+          else
+            iv="${{ github.event.inputs.package_version }}"
+            echo "PKG_VERSION=$iv" >> "$GITHUB_ENV"
+            echo "Publishing version (workflow_dispatch): $iv"
+          fi
+
+      - name: Pack (Release)
+        run: dotnet pack AgentNotes.Core.csproj -c Release -o nupkg -p:PackageVersion="${PKG_VERSION}"
+
+      - name: NuGet login (OIDC → временный API key)
+        uses: NuGet/login@v1
+        id: nuget_login
+        with:
+          user: LonelySoul
+
+      - name: Push nupkg / snupkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${{ steps.nuget_login.outputs.NUGET_API_KEY }}"
+          src="https://api.nuget.org/v3/index.json"
+          shopt -s nullglob
+          for f in nupkg/*.nupkg; do
+            dotnet nuget push "$f" --api-key "$key" --source "$src"
+          done
+          for f in nupkg/*.snupkg; do
+            dotnet nuget push "$f" --api-key "$key" --source "$src"
+          done
