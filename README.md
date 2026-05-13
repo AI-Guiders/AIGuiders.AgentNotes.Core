@@ -12,20 +12,12 @@ dotnet add package AIGuiders.AgentNotes.Core
 
 Публичные сценарии — через **`NotesStorage`** (см. XML-доки в коде). Тексты KB как контент — не эта библиотека; публичный срез канона — [kb-public](https://github.com/KarataevDmitry/kb-public) (лицензия контента там).
 
-## Сборка пакета (maintainers)
+## Сборка и публикация (maintainers)
 
 ```bash
 dotnet pack -c Release -o nupkg
 ```
 
-Версию и метаданные NuGet по умолчанию правь в **`AgentNotes.Core.csproj`**.
+Версия и метаданные по умолчанию — в **`AgentNotes.Core.csproj`**.
 
-### Публикация на NuGet.org (Trusted Publishing)
-
-Пакет публикуется **без API-ключа**: GitHub Actions → OIDC → [Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing) на nuget.org. Учётная запись NuGet.org для выдачи временного ключа — **`LonelySoul`** (имя профиля в шаге `NuGet/login`).
-
-1. На **nuget.org** под пользователем **LonelySoul**: **Trusted Publishing** → новая политика, владелец политики — **ты (индивидуальный пользователь LonelySoul)** или организация, если пакет от неё.
-2. Поля политики (регистр не важен): **Repository owner** `KarataevDmitry`, **Repository** `AIGuiders.AgentNotes.Core`, **Workflow file** `nuget-publish.yml` (только имя файла, без пути `.github/workflows/`). **Environment** оставь пустым, если в workflow нет `environment:`.
-3. В репозитории workflow: **`.github/workflows/nuget-publish.yml`** — запуск вручную (**Actions → Publish to NuGet → Run workflow**, указать версию) или пуш тега **`v1.2.3`** (в пакет пойдёт версия `1.2.3`).
-
-Первый успешный push активирует политику навсегда (для приватных репо до этого действует окно 7 дней — см. доку NuGet).
+Публикация на **nuget.org** через **GitHub Actions** и **[Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing)** (OIDC): workflow **[`nuget-publish.yml`](https://github.com/KarataevDmitry/AIGuiders.AgentNotes.Core/blob/main/.github/workflows/nuget-publish.yml)** в этом репозитории. Детали политики nuget.org и запуска — только в **полном каноне** agent-notes (слой **`knowledge/work/`**, не в kb-public); указатель — карточка **agent-notes-mcp** в том же каноне.
