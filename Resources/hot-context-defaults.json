@@ -1,0 +1,28 @@
+{
+  "default_l0_ids": [
+    "baseline-integrity-epistemic-v1",
+    "epistemic-default-distrust-v1",
+    "active-scope",
+    "current-task",
+    "core-software-context",
+    "language-style-ru",
+    "personal-workstyle-v1",
+    "execution-gate-v1",
+    "response-finalizer-v1",
+    "hot-context-writing-contract",
+    "ontology-router-v1"
+  ],
+  "default_compact_order_suffix": [
+    "workspace-scope-map-v1",
+    "scope-door-to-singularity",
+    "scope-portal",
+    "scope-mixed",
+    "memory-architecture-v1",
+    "memory-load-policy-v1",
+    "memory-compaction-loop-v1",
+    "archive-index-v1"
+  ],
+  "required_core_section_ids": [
+    "current-task"
+  ]
+}
