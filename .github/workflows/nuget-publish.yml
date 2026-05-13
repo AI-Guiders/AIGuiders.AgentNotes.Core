@@ -60,8 +60,13 @@ jobs:
           src="https://api.nuget.org/v3/index.json"
           shopt -s nullglob
           for f in nupkg/*.nupkg; do
-            dotnet nuget push "$f" --api-key "$key" --source "$src"
+            dotnet nuget push "$f" --api-key "$key" --source "$src" --skip-duplicate
           done
+          # Один проход: на NuGet иногда два совпадения *.snupkg или гонка валидации — skip-duplicate и уникальные имена
+          declare -A seen=()
           for f in nupkg/*.snupkg; do
-            dotnet nuget push "$f" --api-key "$key" --source "$src"
+            base=$(basename "$f")
+            if [[ -n "${seen[$base]:-}" ]]; then continue; fi
+            seen[$base]=1
+            dotnet nuget push "$f" --api-key "$key" --source "$src" --skip-duplicate
           done
