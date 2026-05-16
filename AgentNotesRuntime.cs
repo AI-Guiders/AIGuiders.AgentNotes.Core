@@ -23,8 +23,8 @@ public static class AgentNotesRuntime
             : Path.GetFullPath(configFilePath.Trim());
     }
 
-    /// <summary>Test hook only.</summary>
-    internal static void ResetForTests()
+    /// <summary>Clears loaded TOML (host reload, empty config path, or test isolation).</summary>
+    public static void ClearConfiguration()
     {
         s_settings = null;
         ConfigFilePath = null;
