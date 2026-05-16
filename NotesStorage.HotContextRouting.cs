@@ -69,6 +69,7 @@ public sealed partial class NotesStorage
         var (warnBudget, critBudget) = ResolveHotBudgetChars(manifestForHealth);
 
         var missingCoreSections = HotContextDefaults.RequiredCoreSectionIds
+            .Where(required => hotSectionIds.Contains(required, StringComparer.Ordinal))
             .Where(required => !sections.ContainsKey(required))
             .ToArray();
 

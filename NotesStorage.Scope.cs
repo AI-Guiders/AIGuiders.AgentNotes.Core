@@ -11,8 +11,8 @@ public sealed partial class NotesStorage
         var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            var root = ResolveCanonPath(null);
-            var (_, aliasRel) = ReadMcpResolvePathsOrDefaults(root);
+            var root = ResolveKnowledgeRoot(null);
+            var (_, aliasRel) = ReadWorkspacePathsOrDefaults(root);
             MergeScopeAliasFile(Path.Combine(root, KnowledgeDirName, aliasRel.Replace('/', Path.DirectorySeparatorChar)), dict);
         }
         catch (ArgumentException)
@@ -129,13 +129,13 @@ public sealed partial class NotesStorage
         return bestScope;
     }
 
-    /// <summary>Optional map lines (same format as hot section): file under canon from <c>knowledge/META/mcp-resolve-paths-v1.json</c> or default <c>work/local/workspace-scope-map-v1.md</c>. Overrides empty/missing hot sections when <see cref="ResolveCanonPath"/> succeeds.</summary>
+    /// <summary>Optional map lines (same format as hot section): TOML <c>[workspace]</c>, META JSON, or defaults. Overrides empty/missing hot sections when <see cref="ResolveKnowledgeRoot"/> succeeds.</summary>
     private static string? TryLoadWorkspaceScopeMapFromWorkLocal()
     {
         try
         {
-            var root = ResolveCanonPath(null);
-            var (workspaceRel, _) = ReadMcpResolvePathsOrDefaults(root);
+            var root = ResolveKnowledgeRoot(null);
+            var (workspaceRel, _) = ReadWorkspacePathsOrDefaults(root);
             var path = Path.Combine(root, KnowledgeDirName, workspaceRel.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(path))
                 return null;

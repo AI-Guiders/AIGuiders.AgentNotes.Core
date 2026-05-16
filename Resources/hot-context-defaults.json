@@ -1,16 +1,14 @@
 {
   "default_l0_ids": [
     "baseline-integrity-epistemic-v1",
+    "agent-equal-standing-v1",
     "epistemic-default-distrust-v1",
+    "core-when-barriers-fail-v1",
+    "principled-clarity-v1",
     "active-scope",
-    "current-task",
-    "core-software-context",
-    "language-style-ru",
-    "personal-workstyle-v1",
-    "execution-gate-v1",
     "response-finalizer-v1",
-    "hot-context-writing-contract",
-    "ontology-router-v1"
+    "response-one-step-before-finish-v1",
+    "scope-disambiguation-all-everywhere-v1"
   ],
   "default_compact_order_suffix": [
     "workspace-scope-map-v1",

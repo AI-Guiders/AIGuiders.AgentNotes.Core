@@ -6,6 +6,8 @@ namespace AgentNotes.Core;
 
 public sealed partial class NotesStorage
 {
+    private const string DefaultMemoryArchitectureManifestRelativePath = "knowledge/META/memory-architecture-v1.json";
+
     /// <summary>Parse L0 section IDs from memory-architecture-v1 content (block after "### L0:" until next "###").</summary>
     private static IReadOnlyList<string>? ParseL0FromMemoryArchitecture(string? content)
     {
@@ -88,16 +90,10 @@ public sealed partial class NotesStorage
 
             var l0 = new List<string>();
             if (root.TryGetProperty("l0", out var l0El) && l0El.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in l0El.EnumerateArray())
-                {
-                    var id = item.ValueKind == JsonValueKind.String ? (item.GetString() ?? "").Trim() : "";
-                    if (id.Length == 0)
-                        continue;
-                    if (Regex.IsMatch(id, "^[A-Za-z0-9._-]+$"))
-                        l0.Add(id);
-                }
-            }
+                AppendManifestIds(l0, l0El);
+
+            if (root.TryGetProperty("l0_owner", out var l0OwnerEl) && l0OwnerEl.ValueKind == JsonValueKind.Array)
+                AppendManifestIds(l0, l0OwnerEl);
 
             IReadOnlyList<string>? suffix = null;
             if (root.TryGetProperty("compact_order_suffix", out var suffixEl) && suffixEl.ValueKind == JsonValueKind.Array)
@@ -144,12 +140,24 @@ public sealed partial class NotesStorage
         }
     }
 
+    private static void AppendManifestIds(List<string> target, JsonElement array)
+    {
+        foreach (var item in array.EnumerateArray())
+        {
+            var id = item.ValueKind == JsonValueKind.String ? (item.GetString() ?? "").Trim() : "";
+            if (id.Length == 0)
+                continue;
+            if (Regex.IsMatch(id, "^[A-Za-z0-9._-]+$"))
+                target.Add(id);
+        }
+    }
+
     private static MemoryArchitectureManifestData? LoadMemoryArchitectureManifest(IReadOnlyDictionary<string, string> sections, string notesPath)
     {
         var memoryArch = sections.GetValueOrDefault("memory-architecture-v1");
         var manifestPath = TryParseManifestRelativePath(memoryArch);
         if (string.IsNullOrWhiteSpace(manifestPath))
-            return null;
+            manifestPath = DefaultMemoryArchitectureManifestRelativePath;
         return TryLoadMemoryArchitectureManifest(notesPath, manifestPath);
     }
 

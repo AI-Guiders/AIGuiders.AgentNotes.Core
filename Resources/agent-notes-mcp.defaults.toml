@@ -1,0 +1,13 @@
+# Embedded fallback (AgentNotes.Core): только нейтральные плейсхолдеры.
+# Рабочие пути scope — в твоём --config TOML ([workspace]); шаблон: agent-notes KB …/agent-notes.workspace.example.toml
+version = 1
+
+[workspace]
+default_scope = "example"
+scope_map = "example/workspace-scope-map-v1.md"
+scope_aliases = "example/scope-alias-map-v1.md"
+
+[status]
+enabled = false
+port = 17341
+bind = "127.0.0.1"

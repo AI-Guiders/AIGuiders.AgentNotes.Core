@@ -22,9 +22,12 @@ public sealed partial class NotesStorage
         @"(?m)^\s*l0_manifest\s*:\s*(?<path>\S+)\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    /// <summary>Hot notes path: <c>AGENT_NOTES_FILE</c> if set; else <c>{AGENT_NOTES_CANON_PATH}/agent-notes.md</c> if canon env set; else <c>workspace_path/.cascade-ide/agent-notes.md</c>.</summary>
+    /// <summary>Hot notes path: TOML primary root; else <c>AGENT_NOTES_FILE</c>; else <c>{AGENT_NOTES_CANON_PATH}/agent-notes.md</c>; else <c>workspace_path/.cascade-ide/agent-notes.md</c>.</summary>
     public string GetNotesPath(string workspacePath)
     {
+        if (AgentNotesRuntime.TryGetPrimaryKnowledgeRoot(out var primaryRoot))
+            return Path.Combine(primaryRoot, NotesFileName);
+
         var globalPath = Environment.GetEnvironmentVariable(EnvNotesFile);
         if (!string.IsNullOrWhiteSpace(globalPath))
             return Path.GetFullPath(globalPath.Trim());
@@ -40,11 +43,14 @@ public sealed partial class NotesStorage
         return Path.Combine(root, NotesDirName, NotesFileName);
     }
 
-    /// <summary>Resolve canon root: tool argument, then AGENT_NOTES_CANON_PATH, else inferred from AGENT_NOTES_FILE (ancestor directory containing knowledge/).</summary>
-    public static string ResolveCanonPath(string? canonPath)
+    /// <summary>Resolve primary knowledge root: tool argument, TOML <c>--config</c>, legacy env, or infer from <c>AGENT_NOTES_FILE</c>.</summary>
+    public static string ResolveKnowledgeRoot(string? knowledgePath)
     {
-        if (!string.IsNullOrWhiteSpace(canonPath))
-            return Path.GetFullPath(canonPath.Trim());
+        if (!string.IsNullOrWhiteSpace(knowledgePath))
+            return Path.GetFullPath(knowledgePath.Trim());
+
+        if (AgentNotesRuntime.TryGetPrimaryKnowledgeRoot(out var fromSettings))
+            return fromSettings;
 
         var fromEnvCanon = Environment.GetEnvironmentVariable(EnvCanonPath);
         if (!string.IsNullOrWhiteSpace(fromEnvCanon))
@@ -53,17 +59,21 @@ public sealed partial class NotesStorage
         var fromEnvNotes = Environment.GetEnvironmentVariable(EnvNotesFile);
         if (!string.IsNullOrWhiteSpace(fromEnvNotes))
         {
-            var inferred = TryInferCanonRootFromAgentNotesFilePath(fromEnvNotes.Trim());
+            var inferred = TryInferKnowledgeRootFromAgentNotesFilePath(fromEnvNotes.Trim());
             if (inferred is not null)
                 return inferred;
         }
 
         throw new ArgumentException(
-            "canon_path is required when AGENT_NOTES_CANON_PATH is not set and AGENT_NOTES_FILE does not lie under a directory tree that contains knowledge/ (or AGENT_NOTES_FILE is unset).");
+            "knowledge_path is required when local settings are not loaded and AGENT_NOTES_CANON_PATH is not set and AGENT_NOTES_FILE does not lie under a directory tree that contains knowledge/ (or AGENT_NOTES_FILE is unset).");
     }
 
+    /// <summary>Legacy name; use <see cref="ResolveKnowledgeRoot"/>.</summary>
+    [Obsolete("Use ResolveKnowledgeRoot. Renamed in MCP 2.0 (canon_path → knowledge_path).")]
+    public static string ResolveCanonPath(string? canonPath) => ResolveKnowledgeRoot(canonPath);
+
     /// <summary>Walks parents from the notes file directory; returns the first directory that contains a <c>knowledge/</c> subfolder (agent-notes repo layout).</summary>
-    internal static string? TryInferCanonRootFromAgentNotesFilePath(string agentNotesFilePath)
+    internal static string? TryInferKnowledgeRootFromAgentNotesFilePath(string agentNotesFilePath)
     {
         var fullPath = Path.GetFullPath(agentNotesFilePath);
         var current = Path.GetDirectoryName(fullPath);
@@ -102,11 +112,17 @@ public sealed partial class NotesStorage
         return true;
     }
 
-    /// <summary>Optional bootstrap under canon: <c>knowledge/META/mcp-resolve-paths-v1.json</c> with relative paths inside <c>knowledge/</c>. Invalid or missing file → defaults from embedded resource (<see cref="McpResolvePathsDefaults"/>).</summary>
-    private static (string WorkspaceScopeMapRelative, string ScopeAliasMapRelative) ReadMcpResolvePathsOrDefaults(string canonRoot)
+    /// <summary>Workspace map paths: TOML <c>[workspace]</c> when loaded; else optional <c>knowledge/META/mcp-resolve-paths-v1.json</c>; else embedded JSON defaults.</summary>
+    private static (string WorkspaceScopeMapRelative, string ScopeAliasMapRelative) ReadWorkspacePathsOrDefaults(string knowledgeRoot)
     {
+        if (AgentNotesRuntime.IsConfigured)
+        {
+            var ws = AgentNotesRuntime.Settings.Workspace;
+            return (ws.ScopeMapRelative, ws.ScopeAliasMapRelative);
+        }
+
         var defaults = McpResolvePathsDefaults.DefaultsPair;
-        var configPath = Path.Combine(canonRoot, KnowledgeDirName, "META", "mcp-resolve-paths-v1.json");
+        var configPath = Path.Combine(knowledgeRoot, KnowledgeDirName, "META", "mcp-resolve-paths-v1.json");
         if (!File.Exists(configPath))
             return defaults;
 
@@ -139,16 +155,16 @@ public sealed partial class NotesStorage
         }
     }
 
-    public string GetKnowledgeFilePath(string? canonPath, string filePath)
+    public string GetKnowledgeFilePath(string? knowledgePath, string filePath)
     {
-        var root = ResolveCanonPath(canonPath);
+        var root = ResolveKnowledgeRoot(knowledgePath);
         var relative = ValidateKnowledgeRelativePath(filePath);
         return Path.Combine(root, KnowledgeDirName, relative);
     }
 
-    public string ReadKnowledgeFile(string? canonPath, string filePath, int? firstLine1Based = null, int? maxLineCount = null)
+    public string ReadKnowledgeFile(string? knowledgePath, string filePath, int? firstLine1Based = null, int? maxLineCount = null)
     {
-        var fullPath = GetKnowledgeFilePath(canonPath, filePath);
+        var fullPath = GetKnowledgeFilePath(knowledgePath, filePath);
         if (!File.Exists(fullPath)) return "";
         var full = File.ReadAllText(fullPath, Encoding.UTF8);
         if (firstLine1Based is null && maxLineCount is null) return full;
@@ -175,9 +191,9 @@ public sealed partial class NotesStorage
     private static string[] SplitToLines(string text) =>
         text.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
 
-    public string ListKnowledgeFiles(string? canonPath, string? subdir)
+    public string ListKnowledgeFiles(string? knowledgePath, string? subdir)
     {
-        var root = ResolveCanonPath(canonPath);
+        var root = ResolveKnowledgeRoot(knowledgePath);
         var knowledgeRoot = Path.Combine(root, KnowledgeDirName);
         var searchDir = string.IsNullOrWhiteSpace(subdir)
             ? knowledgeRoot
@@ -200,13 +216,13 @@ public sealed partial class NotesStorage
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    public string WriteKnowledgeFile(string? canonPath, string filePath, string content, bool saveRevision = true)
+    public string WriteKnowledgeFile(string? knowledgePath, string filePath, string content, bool saveRevision = true)
     {
-        var fullPath = GetKnowledgeFilePath(canonPath, filePath);
+        var fullPath = GetKnowledgeFilePath(knowledgePath, filePath);
         if (saveRevision && File.Exists(fullPath))
         {
             var current = File.ReadAllText(fullPath, Encoding.UTF8);
-            WriteKnowledgeRevision(canonPath, filePath, current, "write");
+            WriteKnowledgeRevision(knowledgePath, filePath, current, "write");
         }
         var dir = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrWhiteSpace(dir))
@@ -215,9 +231,9 @@ public sealed partial class NotesStorage
         return "OK";
     }
 
-    private void WriteKnowledgeRevision(string? canonPath, string filePath, string snapshotContent, string reason)
+    private void WriteKnowledgeRevision(string? knowledgePath, string filePath, string snapshotContent, string reason)
     {
-        var root = ResolveCanonPath(canonPath);
+        var root = ResolveKnowledgeRoot(knowledgePath);
         var revisionsDir = Path.Combine(root, KnowledgeDirName, RevisionsDirName);
         Directory.CreateDirectory(revisionsDir);
         var timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
@@ -227,12 +243,12 @@ public sealed partial class NotesStorage
         File.WriteAllText(revisionPath, snapshotContent, Encoding.UTF8);
     }
 
-    public string AppendKnowledgeFile(string? canonPath, string filePath, string content, bool saveRevision = true)
+    public string AppendKnowledgeFile(string? knowledgePath, string filePath, string content, bool saveRevision = true)
     {
-        var fullPath = GetKnowledgeFilePath(canonPath, filePath);
+        var fullPath = GetKnowledgeFilePath(knowledgePath, filePath);
         var existing = File.Exists(fullPath) ? File.ReadAllText(fullPath, Encoding.UTF8) : "";
         if (saveRevision && existing.Length > 0)
-            WriteKnowledgeRevision(canonPath, filePath, existing, "append");
+            WriteKnowledgeRevision(knowledgePath, filePath, existing, "append");
         var dir = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
@@ -241,15 +257,15 @@ public sealed partial class NotesStorage
         return "OK";
     }
 
-    public string UpsertKnowledgeSection(string? canonPath, string filePath, string sectionId, string content, bool saveRevision = true)
+    public string UpsertKnowledgeSection(string? knowledgePath, string filePath, string sectionId, string content, bool saveRevision = true)
     {
-        var fullPath = GetKnowledgeFilePath(canonPath, filePath);
+        var fullPath = GetKnowledgeFilePath(knowledgePath, filePath);
         var dir = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrWhiteSpace(dir))
             Directory.CreateDirectory(dir);
         var existing = File.Exists(fullPath) ? File.ReadAllText(fullPath, Encoding.UTF8) : "";
         if (saveRevision && existing.Length > 0)
-            WriteKnowledgeRevision(canonPath, filePath, existing, "upsert");
+            WriteKnowledgeRevision(knowledgePath, filePath, existing, "upsert");
         var startMarker = $"<!-- section:{sectionId} -->";
         var endMarker = $"<!-- /section:{sectionId} -->";
         var sectionBlock = $"{startMarker}\n{content}\n{endMarker}";
@@ -270,18 +286,18 @@ public sealed partial class NotesStorage
         return "OK";
     }
 
-    public string DeleteKnowledgeFile(string? canonPath, string filePath)
+    public string DeleteKnowledgeFile(string? knowledgePath, string filePath)
     {
-        var fullPath = GetKnowledgeFilePath(canonPath, filePath);
+        var fullPath = GetKnowledgeFilePath(knowledgePath, filePath);
         if (!File.Exists(fullPath))
             return "NO_CHANGES";
         File.Delete(fullPath);
         return "OK";
     }
 
-    public string DeleteKnowledgeSection(string? canonPath, string filePath, string sectionId)
+    public string DeleteKnowledgeSection(string? knowledgePath, string filePath, string sectionId)
     {
-        var fullPath = GetKnowledgeFilePath(canonPath, filePath);
+        var fullPath = GetKnowledgeFilePath(knowledgePath, filePath);
         if (!File.Exists(fullPath))
             return "NO_CHANGES";
         var existing = File.ReadAllText(fullPath, Encoding.UTF8);
