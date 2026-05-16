@@ -11,6 +11,15 @@ public static class AgentNotesBootstrap
     /// <summary>Exit code when config path is set but invalid.</summary>
     public const int ExitInvalidConfig = 1;
 
+    /// <summary>Last successfully loaded config path (<see cref="TryLoadSettings"/>).</summary>
+    public static string? LoadedConfigPath { get; private set; }
+
+    public static bool IsStatusOnly(string[] args) =>
+        args.Any(static a => a is "--status-only" or "--status_only");
+
+    public static string[] FilterStatusOnlyArgs(string[] args) =>
+        args.Where(static a => a is not "--status-only" and not "--status_only").ToArray();
+
     public static string? ResolveConfigPath(string[] args)
     {
         for (var i = 0; i < args.Length; i++)
@@ -35,8 +44,10 @@ public static class AgentNotesBootstrap
     /// <summary>Load settings for MCP host startup. Returns exit code 0 on success.</summary>
     public static int TryLoadSettings(string[] args, out LocalSettings? settings, out string? errorMessage)
     {
+        args = FilterStatusOnlyArgs(args);
         settings = null;
         errorMessage = null;
+        LoadedConfigPath = null;
         string? configPath;
         try
         {
@@ -58,6 +69,7 @@ public static class AgentNotesBootstrap
 
         try
         {
+            LoadedConfigPath = Path.GetFullPath(configPath);
             settings = LocalSettingsLoader.Load(configPath);
             return 0;
         }

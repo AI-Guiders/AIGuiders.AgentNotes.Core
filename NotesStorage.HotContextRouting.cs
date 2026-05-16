@@ -141,6 +141,59 @@ public sealed partial class NotesStorage
         return JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
     }
 
+    /// <summary>Hot-context section sizes for AgentNotesStatus <c>GET /hot-preview</c> (read-only JSON).</summary>
+    public string HotPreview(string workspacePath, string? activeScope)
+    {
+        var notesPath = GetNotesPath(workspacePath);
+        var notes = Read(workspacePath);
+        var sections = ParseSections(notes);
+        var scopeAliases = LoadScopeAliasesMerged();
+        var resolvedScope = ResolveScope(activeScope, sections, workspacePath, scopeAliases);
+        var hotSectionIds = BuildHotSectionIds(resolvedScope, sections, notesPath, scopeAliases);
+        var hotSections = hotSectionIds
+            .Where(sections.ContainsKey)
+            .Select(id => new
+            {
+                id,
+                chars = sections[id].Length,
+                lines = CountLines(sections[id])
+            })
+            .ToArray();
+
+        var hotChars = hotSections.Sum(x => x.chars);
+        var hotLines = hotSections.Sum(x => x.lines);
+        var hotIdSet = hotSectionIds.ToHashSet(StringComparer.Ordinal);
+
+        var payload = new
+        {
+            workspace_path = workspacePath,
+            notes_path = notesPath,
+            notes_exists = File.Exists(notesPath),
+            resolved_scope = resolvedScope,
+            hot_context = new
+            {
+                section_ids = hotSectionIds,
+                loaded_section_count = hotSections.Length,
+                chars = hotChars,
+                lines = hotLines
+            },
+            sections = hotSections,
+            largest_other_sections = sections
+                .Where(kv => !hotIdSet.Contains(kv.Key))
+                .Select(kv => new
+                {
+                    id = kv.Key,
+                    chars = kv.Value.Length,
+                    lines = CountLines(kv.Value)
+                })
+                .OrderByDescending(x => x.chars)
+                .Take(10)
+                .ToArray()
+        };
+
+        return JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+    }
+
     public string RouteContext(
         string workspacePath,
         string query,
