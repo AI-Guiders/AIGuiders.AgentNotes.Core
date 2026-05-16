@@ -1,6 +1,6 @@
 # AIGuiders.AgentNotes.Core
 
-.NET-библиотека **`AgentNotes.Core`**: пути к hot-заметкам и канону, чтение/запись `agent-notes.md` и слоя **`knowledge/`**, hot-context, встроенные дефолты (`mcp-resolve-paths`, `hot-context-defaults`). Используется в **[agent-notes-mcp](https://github.com/KarataevDmitry/agent-notes-mcp)** и при необходимости in-proc в IDE.
+.NET-библиотека **`AgentNotes.Core`** (2.x): пути к hot-заметкам и **knowledge root**, чтение/запись `agent-notes.md` и **`knowledge/`**, hot-context, локальный TOML (`LocalSettingsLoader`), embedded дефолты (`agent-notes-mcp.defaults.toml`, `hot-context-defaults.json`). Используется в **[agent-notes-mcp](https://github.com/AI-Guiders/agent-notes-mcp)** 2.0 (`--config`) и при необходимости in-proc в IDE.
 
 ## Установка
 

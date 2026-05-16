@@ -5,7 +5,7 @@ namespace AgentNotes.Core;
 
 public sealed partial class NotesStorage
 {
-    /// <summary>Reads scope alias file under canon (path from <c>knowledge/META/mcp-resolve-paths-v1.json</c> or defaults). No hardcoded alias table in code.</summary>
+    /// <summary>Reads scope alias file (path from TOML <c>[workspace]</c> or embedded defaults). No hardcoded alias table in code.</summary>
     private static IReadOnlyDictionary<string, string> LoadScopeAliasesMerged()
     {
         var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

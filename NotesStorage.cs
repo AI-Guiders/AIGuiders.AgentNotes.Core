@@ -12,7 +12,6 @@ public sealed partial class NotesStorage
     private const string EnvNotesFile = "AGENT_NOTES_FILE";
     private const string RevisionsDirName = ".revisions";
     private const string KnowledgeDirName = "knowledge";
-    private const string EnvCanonPath = "AGENT_NOTES_CANON_PATH";
 
     private readonly object _sync = new();
     private static readonly Regex SectionRegex = new(
@@ -22,7 +21,7 @@ public sealed partial class NotesStorage
         @"(?m)^\s*l0_manifest\s*:\s*(?<path>\S+)\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    /// <summary>Hot notes path: TOML primary root; else <c>AGENT_NOTES_FILE</c>; else <c>{AGENT_NOTES_CANON_PATH}/agent-notes.md</c>; else <c>workspace_path/.cascade-ide/agent-notes.md</c>.</summary>
+    /// <summary>Hot notes path: TOML primary root (<c>--config</c>); else <c>AGENT_NOTES_FILE</c>; else <c>workspace_path/.cascade-ide/agent-notes.md</c>.</summary>
     public string GetNotesPath(string workspacePath)
     {
         if (AgentNotesRuntime.TryGetPrimaryKnowledgeRoot(out var primaryRoot))
@@ -32,10 +31,6 @@ public sealed partial class NotesStorage
         if (!string.IsNullOrWhiteSpace(globalPath))
             return Path.GetFullPath(globalPath.Trim());
 
-        var canonEnv = Environment.GetEnvironmentVariable(EnvCanonPath);
-        if (!string.IsNullOrWhiteSpace(canonEnv))
-            return Path.Combine(Path.GetFullPath(canonEnv.Trim()), NotesFileName);
-
         var root = Path.GetFullPath(workspacePath.Trim());
         if (File.Exists(root))
             root = Path.GetDirectoryName(root) ?? root;
@@ -43,7 +38,7 @@ public sealed partial class NotesStorage
         return Path.Combine(root, NotesDirName, NotesFileName);
     }
 
-    /// <summary>Resolve primary knowledge root: tool argument, TOML <c>--config</c>, legacy env, or infer from <c>AGENT_NOTES_FILE</c>.</summary>
+    /// <summary>Resolve primary knowledge root: tool <c>knowledge_path</c>, TOML <c>--config</c>, or infer from <c>AGENT_NOTES_FILE</c> tree.</summary>
     public static string ResolveKnowledgeRoot(string? knowledgePath)
     {
         if (!string.IsNullOrWhiteSpace(knowledgePath))
@@ -51,10 +46,6 @@ public sealed partial class NotesStorage
 
         if (AgentNotesRuntime.TryGetPrimaryKnowledgeRoot(out var fromSettings))
             return fromSettings;
-
-        var fromEnvCanon = Environment.GetEnvironmentVariable(EnvCanonPath);
-        if (!string.IsNullOrWhiteSpace(fromEnvCanon))
-            return Path.GetFullPath(fromEnvCanon.Trim());
 
         var fromEnvNotes = Environment.GetEnvironmentVariable(EnvNotesFile);
         if (!string.IsNullOrWhiteSpace(fromEnvNotes))
@@ -65,12 +56,8 @@ public sealed partial class NotesStorage
         }
 
         throw new ArgumentException(
-            "knowledge_path is required when local settings are not loaded and AGENT_NOTES_CANON_PATH is not set and AGENT_NOTES_FILE does not lie under a directory tree that contains knowledge/ (or AGENT_NOTES_FILE is unset).");
+            "knowledge_path is required when --config is not loaded and AGENT_NOTES_FILE is unset or does not lie under a directory tree that contains knowledge/.");
     }
-
-    /// <summary>Legacy name; use <see cref="ResolveKnowledgeRoot"/>.</summary>
-    [Obsolete("Use ResolveKnowledgeRoot. Renamed in MCP 2.0 (canon_path → knowledge_path).")]
-    public static string ResolveCanonPath(string? canonPath) => ResolveKnowledgeRoot(canonPath);
 
     /// <summary>Walks parents from the notes file directory; returns the first directory that contains a <c>knowledge/</c> subfolder (agent-notes repo layout).</summary>
     internal static string? TryInferKnowledgeRootFromAgentNotesFilePath(string agentNotesFilePath)
@@ -112,7 +99,7 @@ public sealed partial class NotesStorage
         return true;
     }
 
-    /// <summary>Workspace map paths: TOML <c>[workspace]</c> when loaded; else optional <c>knowledge/META/mcp-resolve-paths-v1.json</c>; else embedded JSON defaults.</summary>
+    /// <summary>Workspace map paths: TOML <c>[workspace]</c> when <c>--config</c> loaded; else embedded defaults from AgentNotes.Core.</summary>
     private static (string WorkspaceScopeMapRelative, string ScopeAliasMapRelative) ReadWorkspacePathsOrDefaults(string knowledgeRoot)
     {
         if (AgentNotesRuntime.IsConfigured)
@@ -121,38 +108,8 @@ public sealed partial class NotesStorage
             return (ws.ScopeMapRelative, ws.ScopeAliasMapRelative);
         }
 
-        var defaults = McpResolvePathsDefaults.DefaultsPair;
-        var configPath = Path.Combine(knowledgeRoot, KnowledgeDirName, "META", "mcp-resolve-paths-v1.json");
-        if (!File.Exists(configPath))
-            return defaults;
-
-        try
-        {
-            var json = File.ReadAllText(configPath, Encoding.UTF8);
-            var doc = JsonSerializer.Deserialize<McpResolvePathsConfigModel>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
-            });
-            if (doc is null)
-                return defaults;
-
-            var ws = string.IsNullOrWhiteSpace(doc.WorkspaceScopeMap) ? defaults.WorkspaceScopeMapRelative : doc.WorkspaceScopeMap.Trim();
-            var al = string.IsNullOrWhiteSpace(doc.ScopeAliasMap) ? defaults.ScopeAliasMapRelative : doc.ScopeAliasMap.Trim();
-            if (!TryValidateKnowledgeRelativePath(ws, out var wsNorm) || !TryValidateKnowledgeRelativePath(al, out var alNorm))
-                return defaults;
-
-            return (wsNorm, alNorm);
-        }
-        catch (JsonException)
-        {
-            return defaults;
-        }
-        catch (IOException)
-        {
-            return defaults;
-        }
+        _ = knowledgeRoot;
+        return McpResolvePathsDefaults.DefaultsPair;
     }
 
     public string GetKnowledgeFilePath(string? knowledgePath, string filePath)
