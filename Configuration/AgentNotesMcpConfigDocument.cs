@@ -62,6 +62,13 @@ internal sealed class KnowledgeSection
 
         var primaryRoot = KnowledgeRootResolver.Resolve(Primary, namedRoots);
         var readOnly = ReadOnlyKnowledgeEntry.ToRuntimeList(ReadOnly);
+        foreach (var entry in readOnly)
+        {
+            if (namedRoots.ContainsKey(entry.Id))
+                throw new InvalidOperationException(
+                    $"[[knowledge.read_only]] id '{entry.Id}' conflicts with [knowledge.roots].");
+        }
+
         return new ResolvedKnowledge(primaryRoot, namedRoots, readOnly);
     }
 }

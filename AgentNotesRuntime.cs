@@ -30,6 +30,9 @@ public static class AgentNotesRuntime
         ConfigFilePath = null;
     }
 
+    /// <summary>Test isolation alias for <see cref="ClearConfiguration"/>.</summary>
+    public static void ResetForTests() => ClearConfiguration();
+
     public static bool TryGetPrimaryKnowledgeRoot([NotNullWhen(true)] out string? root)
     {
         if (s_settings is null)
