@@ -239,6 +239,14 @@ public sealed partial class NotesStorage
             candidates.Add((id, content, score, matchCount));
         }
 
+        AppendKnowledgeRootsOverlayCandidates(
+            candidates,
+            tokens,
+            query,
+            sections,
+            out var knowledgeRootsOverlayApplied,
+            out var knowledgeRootsRegistryHits);
+
         var selected = candidates
             .OrderByDescending(x => x.score)
             .ThenBy(x => x.id, StringComparer.Ordinal)
@@ -278,6 +286,8 @@ public sealed partial class NotesStorage
             max_sections = maxSections,
             max_chars = maxChars,
             truncated,
+            knowledge_roots_overlay_applied = knowledgeRootsOverlayApplied,
+            knowledge_roots_registry_hits = knowledgeRootsRegistryHits,
             selected = emitted,
             assembled_context = assembled.ToString().TrimEnd('\n')
         };
