@@ -329,6 +329,24 @@ public sealed partial class NotesStorage
         return SaveWithRevision(notesPath, next, $"upsert-{sectionId}");
     }
 
+    public string DeleteSection(string workspacePath, string sectionId)
+    {
+        var notesPath = GetNotesPath(workspacePath);
+        if (!File.Exists(notesPath))
+            return "NO_CHANGES";
+        var existing = File.ReadAllText(notesPath, Encoding.UTF8);
+        var startMarker = $"<!-- section:{sectionId} -->";
+        var endMarker = $"<!-- /section:{sectionId} -->";
+        var start = existing.IndexOf(startMarker, StringComparison.Ordinal);
+        var end = start >= 0 ? existing.IndexOf(endMarker, start, StringComparison.Ordinal) : -1;
+        if (start < 0 || end < 0)
+            return "NO_CHANGES";
+        var before = existing[..start].TrimEnd('\r', '\n');
+        var after = existing[(end + endMarker.Length)..].TrimStart('\r', '\n');
+        var next = JoinBlocks(before, after);
+        return SaveWithRevision(notesPath, next, $"delete-{sectionId}");
+    }
+
     public string ListRevisions(string workspacePath, int limit)
     {
         var notesPath = GetNotesPath(workspacePath);
