@@ -313,6 +313,72 @@ public sealed partial class NotesStorage
         return SaveWithRevision(notesPath, next, $"delete-{sectionId}");
     }
 
+    public string ValidateSections(string workspacePath)
+    {
+        var notesPath = GetNotesPath(workspacePath);
+        var existing = File.Exists(notesPath) ? File.ReadAllText(notesPath, Encoding.UTF8) : "";
+        return SectionMarkup.ToJson(SectionMarkup.Analyze(existing));
+    }
+
+    public string NormalizeSections(string workspacePath, bool apply)
+    {
+        var notesPath = GetNotesPath(workspacePath);
+        var existing = File.Exists(notesPath) ? File.ReadAllText(notesPath, Encoding.UTF8) : "";
+        var normalized = SectionMarkup.Normalize(existing);
+        var changed = !string.Equals(existing, normalized, StringComparison.Ordinal);
+        if (!apply)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                changed,
+                before = SectionMarkup.Analyze(existing),
+                after = SectionMarkup.Analyze(normalized),
+                content = normalized.TrimEnd('\n')
+            }, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+        }
+
+        if (!changed)
+            return "NO_CHANGES";
+        return SaveWithRevision(notesPath, normalized, "normalize-sections");
+    }
+
+    public string ValidateKnowledgeSections(string? knowledgePath, string filePath, string? knowledgeRootId = null)
+    {
+        var root = ResolveKnowledgeRoot(knowledgePath, knowledgeRootId);
+        var fullPath = GetKnowledgeFilePathFromRoot(root, filePath);
+        var existing = File.Exists(fullPath) ? File.ReadAllText(fullPath, Encoding.UTF8) : "";
+        return SectionMarkup.ToJson(SectionMarkup.Analyze(existing));
+    }
+
+    public string NormalizeKnowledgeSections(string? knowledgePath, string filePath, bool apply, bool saveRevision = true, string? knowledgeRootId = null)
+    {
+        var root = ResolveKnowledgeRootForWrite(knowledgePath, knowledgeRootId);
+        var fullPath = GetKnowledgeFilePathFromRoot(root, filePath);
+        var existing = File.Exists(fullPath) ? File.ReadAllText(fullPath, Encoding.UTF8) : "";
+        var normalized = SectionMarkup.Normalize(existing);
+        var changed = !string.Equals(existing, normalized, StringComparison.Ordinal);
+        if (!apply)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                changed,
+                before = SectionMarkup.Analyze(existing),
+                after = SectionMarkup.Analyze(normalized),
+                content = normalized.TrimEnd('\n')
+            }, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower });
+        }
+
+        if (!changed)
+            return "NO_CHANGES";
+        if (saveRevision && existing.Length > 0)
+            WriteKnowledgeRevision(root, filePath, existing, "normalize-sections");
+        var dir = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrWhiteSpace(dir))
+            Directory.CreateDirectory(dir);
+        File.WriteAllText(fullPath, normalized, Encoding.UTF8);
+        return "OK";
+    }
+
     public string ListRevisions(string workspacePath, int limit)
     {
         var notesPath = GetNotesPath(workspacePath);
