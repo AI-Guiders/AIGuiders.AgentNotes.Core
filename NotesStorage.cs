@@ -235,22 +235,7 @@ public sealed partial class NotesStorage
         var existing = File.Exists(fullPath) ? File.ReadAllText(fullPath, Encoding.UTF8) : "";
         if (saveRevision && existing.Length > 0)
             WriteKnowledgeRevision(root, filePath, existing, "upsert");
-        var startMarker = $"<!-- section:{sectionId} -->";
-        var endMarker = $"<!-- /section:{sectionId} -->";
-        var sectionBlock = $"{startMarker}\n{content}\n{endMarker}";
-        var start = existing.IndexOf(startMarker, StringComparison.Ordinal);
-        var end = start >= 0 ? existing.IndexOf(endMarker, start, StringComparison.Ordinal) : -1;
-        string next;
-        if (start >= 0 && end >= 0)
-        {
-            var before = existing[..start].TrimEnd('\r', '\n');
-            var after = existing[(end + endMarker.Length)..].TrimStart('\r', '\n');
-            next = JoinBlocks(before, sectionBlock, after);
-        }
-        else
-        {
-            next = JoinBlocks(existing, sectionBlock);
-        }
+        var next = SectionMarkup.UpsertBlock(existing, sectionId, content);
         File.WriteAllText(fullPath, next, Encoding.UTF8);
         return "OK";
     }
@@ -306,26 +291,7 @@ public sealed partial class NotesStorage
     {
         var notesPath = GetNotesPath(workspacePath);
         var existing = File.Exists(notesPath) ? File.ReadAllText(notesPath, Encoding.UTF8) : "";
-
-        var startMarker = $"<!-- section:{sectionId} -->";
-        var endMarker = $"<!-- /section:{sectionId} -->";
-        var sectionBlock = $"{startMarker}\n{content}\n{endMarker}";
-
-        var start = existing.IndexOf(startMarker, StringComparison.Ordinal);
-        var end = start >= 0 ? existing.IndexOf(endMarker, start, StringComparison.Ordinal) : -1;
-
-        string next;
-        if (start >= 0 && end >= 0)
-        {
-            var before = existing[..start].TrimEnd('\r', '\n');
-            var after = existing[(end + endMarker.Length)..].TrimStart('\r', '\n');
-            next = JoinBlocks(before, sectionBlock, after);
-        }
-        else
-        {
-            next = JoinBlocks(existing, sectionBlock);
-        }
-
+        var next = SectionMarkup.UpsertBlock(existing, sectionId, content);
         return SaveWithRevision(notesPath, next, $"upsert-{sectionId}");
     }
 
