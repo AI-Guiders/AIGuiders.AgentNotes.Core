@@ -242,6 +242,130 @@ public sealed partial class NotesStorage
         return JsonSerializer.Serialize(new { path = searchDir, files, total = files.Length }, JsonOptions);
     }
 
+    /// <summary>
+    /// Scan knowledge/**/*.md for <c>**Tags:**</c> lines.
+    /// <paramref name="tag"/> empty → inventory (tag → count); set → hits for that tag (ssot first).
+    /// </summary>
+    public string QueryKnowledgeTags(
+        string? knowledgePath,
+        string? tag = null,
+        string? subdir = null,
+        string? knowledgeRootId = null,
+        int limit = 50)
+    {
+        var root = ResolveKnowledgeRoot(knowledgePath, knowledgeRootId);
+        var knowledgeRoot = Path.Combine(root, KnowledgeDirName);
+        var searchDir = string.IsNullOrWhiteSpace(subdir)
+            ? knowledgeRoot
+            : Path.Combine(knowledgeRoot, ValidateKnowledgeRelativePath(subdir.Trim().Replace('\\', '/')));
+        if (!Directory.Exists(searchDir))
+        {
+            return JsonSerializer.Serialize(new
+            {
+                path = searchDir,
+                query = tag,
+                files_scanned = 0,
+                tags = Array.Empty<object>(),
+                hits = Array.Empty<object>(),
+                total = 0
+            }, JsonOptions);
+        }
+
+        var baseLen = knowledgeRoot.Length;
+        var want = KnowledgeTags.NormalizeOne(tag);
+        var lim = Math.Clamp(limit, 1, 500);
+        var inverted = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var hits = new List<KnowledgeTagHit>();
+        var taggedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var scanned = 0;
+
+        foreach (var full in Directory.GetFiles(searchDir, "*.md", SearchOption.AllDirectories))
+        {
+            if (full.Contains(RevisionsDirName, StringComparison.Ordinal))
+                continue;
+            var norm = full.Replace('\\', '/');
+            if (norm.Contains("/scratch/", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            scanned++;
+            string text;
+            try { text = File.ReadAllText(full, Encoding.UTF8); }
+            catch { continue; }
+
+            var tags = KnowledgeTags.ParseTagsLine(text);
+            if (tags.Count == 0)
+                continue;
+
+            var rel = full.Substring(baseLen).TrimStart(Path.DirectorySeparatorChar).Replace('\\', '/');
+            taggedPaths.Add(rel);
+            var topics = KnowledgeTags.TopicTags(tags);
+            var roles = KnowledgeTags.RoleTagsOf(tags);
+            var ssot = roles.Contains(KnowledgeTags.RoleSsot, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var t in tags)
+                inverted[t] = inverted.TryGetValue(t, out var c) ? c + 1 : 1;
+
+            if (want is not null && tags.Contains(want, StringComparer.OrdinalIgnoreCase))
+            {
+                hits.Add(new KnowledgeTagHit(
+                    rel,
+                    tags.Select(t => "#" + t).ToArray(),
+                    topics.Select(t => "#" + t).ToArray(),
+                    roles.Select(t => "#" + t).ToArray(),
+                    ssot));
+            }
+        }
+
+        if (want is not null)
+        {
+            var ordered = hits
+                .OrderByDescending(h => h.Ssot)
+                .ThenBy(h => h.Path, StringComparer.Ordinal)
+                .Take(lim)
+                .Select(h => new
+                {
+                    path = h.Path,
+                    tags = h.Tags,
+                    topics = h.Topics,
+                    roles = h.Roles,
+                    ssot = h.Ssot
+                })
+                .ToArray();
+            return JsonSerializer.Serialize(new
+            {
+                path = searchDir,
+                query = "#" + want,
+                files_scanned = scanned,
+                total = ordered.Length,
+                hits = ordered
+            }, JsonOptions);
+        }
+
+        var inventory = inverted
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(lim)
+            .Select(kv => new { tag = "#" + kv.Key, file_count = kv.Value })
+            .ToArray();
+
+        return JsonSerializer.Serialize(new
+        {
+            path = searchDir,
+            query = (string?)null,
+            files_scanned = scanned,
+            tagged_files = taggedPaths.Count,
+            total_tags = inverted.Count,
+            tags = inventory
+        }, JsonOptions);
+    }
+
+    private sealed record KnowledgeTagHit(
+        string Path,
+        string[] Tags,
+        string[] Topics,
+        string[] Roles,
+        bool Ssot);
+
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public string WriteKnowledgeFile(string? knowledgePath, string filePath, string content, bool saveRevision = true, string? knowledgeRootId = null)
