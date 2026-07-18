@@ -138,6 +138,67 @@ public sealed partial class NotesStorage
         return SliceTextByLines(full, firstLine1Based ?? 1, maxLineCount);
     }
 
+    /// <summary>
+    /// Compact TOC for long KB files: section ids + short previews; prefers full <c>meta</c>/<c>summary</c> body when present.
+    /// Returns JSON (not raw markdown dump). Missing file → <c>ok:false</c>.
+    /// </summary>
+    public string OutlineKnowledgeFile(string? knowledgePath, string filePath, int previewLines = 5, string? knowledgeRootId = null)
+    {
+        var fullPath = GetKnowledgeFilePath(knowledgePath, filePath, knowledgeRootId);
+        if (!File.Exists(fullPath))
+        {
+            return JsonSerializer.Serialize(new
+            {
+                mode = "outline",
+                file_path = filePath,
+                ok = false,
+                error = "file_not_found",
+                section_ids = Array.Empty<string>(),
+                sections = Array.Empty<object>(),
+            }, JsonOptions);
+        }
+
+        var full = File.ReadAllText(fullPath, Encoding.UTF8);
+        var previewCap = Math.Clamp(previewLines, 1, 40);
+        var blocks = SectionMarkup.EnumerateCompleteBlocks(full);
+        var sectionIds = blocks.Select(b => b.Id).Distinct(StringComparer.Ordinal).ToArray();
+
+        object? preferred = null;
+        foreach (var preferId in new[] { "meta", "summary" })
+        {
+            var hit = blocks.FirstOrDefault(b => string.Equals(b.Id, preferId, StringComparison.Ordinal));
+            if (hit is null)
+                continue;
+            preferred = new { id = hit.Id, content = hit.Content };
+            break;
+        }
+
+        var sections = blocks.Select(b =>
+        {
+            var lines = SplitToLines(b.Content);
+            var preview = lines.Length == 0
+                ? ""
+                : string.Join("\n", lines, 0, Math.Min(previewCap, lines.Length));
+            return new
+            {
+                id = b.Id,
+                preview,
+                line_count = lines.Length,
+            };
+        }).ToArray();
+
+        return JsonSerializer.Serialize(new
+        {
+            mode = "outline",
+            file_path = filePath,
+            ok = true,
+            section_ids = sectionIds,
+            preferred,
+            sections,
+            has_section_markers = blocks.Count > 0,
+        }, JsonOptions);
+    }
+
     /// <summary>Return a substring of <paramref name="text"/> by line numbers. <paramref name="firstLine1Based"/> is 1-based. <paramref name="maxLineCount"/>: null = to EOF, 0 = empty, N = at most N lines.</summary>
     internal static string SliceTextByLines(string text, int firstLine1Based, int? maxLineCount)
     {

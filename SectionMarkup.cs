@@ -172,6 +172,25 @@ public static partial class SectionMarkup
         return JoinBlocks(existing, sectionBlock);
     }
 
+    /// <summary>Ordered complete blocks (document order). Empty when none.</summary>
+    public static IReadOnlyList<SectionBlock> EnumerateCompleteBlocks(string text)
+    {
+        text ??= "";
+        var matches = CompleteBlockRegex().Matches(text);
+        if (matches.Count == 0)
+            return Array.Empty<SectionBlock>();
+
+        var list = new List<SectionBlock>(matches.Count);
+        foreach (Match m in matches)
+        {
+            var id = m.Groups["id"].Value;
+            var content = m.Groups["content"].Value.Trim('\r', '\n');
+            list.Add(new SectionBlock(id, content));
+        }
+
+        return list;
+    }
+
     public static string ToJson(SectionValidationReport report) =>
         JsonSerializer.Serialize(report, JsonOptions);
 
@@ -197,6 +216,8 @@ public static partial class SectionMarkup
 }
 
 public sealed record SectionDuplicate(string Id, int Count);
+
+public sealed record SectionBlock(string Id, string Content);
 
 public sealed record SectionValidationReport(
     bool Ok,
